@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Suchu's Puzzle Kingdom</title>
+    <style>
+        :root {
+            --gold: #F4D03F;
+            --dark-gold: #B7950B;
+            --bg: #121212;
+            --panel-bg: rgba(20, 20, 20, 0.95);
+        }
+
+        body {
+            margin: 0; background-color: var(--bg); color: white;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden; display: flex; flex-direction: column; align-items: center;
+            height: 100vh;
+        }
+
+        /* Gold UI */
+        #header {
+            width: 100%; padding: 10px 15px; box-sizing: border-box;
+            background: linear-gradient(145deg, #2a2a2a, #000);
+            border-bottom: 2px solid var(--gold);
+            display: flex; justify-content: space-between; align-items: center;
+        }
+
+        .stat { color: var(--gold); font-weight: bold; text-shadow: 0 0 5px rgba(244, 208, 63, 0.4); }
+        
+        #streak-banner {
+            width: 100%; background: linear-gradient(90deg, #B7950B, #F4D03F, #B7950B);
+            color: black; font-weight: bold; text-align: center; padding: 5px 0;
+            display: none; font-size: 0.9rem;
+        }
+
+        #game-info {
+            display: flex; gap: 15px; margin: 10px 0; color: var(--gold); font-size: 0.9rem;
+            background: rgba(255,255,255,0.1); padding: 5px 15px; border-radius: 20px;
+        }
+
+        /* Board & Tiles */
+        #game-container {
+            position: relative; border: 4px solid var(--gold); border-radius: 10px;
+            box-shadow: 0 0 25px rgba(244, 208, 63, 0.2); background: #222;
+            transition: all 0.5s ease;
+        }
+
+        .tile {
+            position: absolute; background-size: cover; border: 1px solid rgba(255,255,255,0.2);
+            display: flex; justify-content: center; align-items: center;
+            font-weight: bold; font-size: 1.5rem; color: white; text-shadow: 2px 2px 4px #000;
+            transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), left 0.3s ease, top 0.3s ease;
+            cursor: pointer; box-sizing: border-box;
+        }
+
+        /* Controls */
+        .controls-row {
+            display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 15px;
+            max-width: 400px;
+        }
+
+        .btn {
+            background: linear-gradient(145deg, var(--gold), var(--dark-gold));
+            border: none; color: black; padding: 10px 15px; border-radius: 20px;
+            font-weight: bold; transition: transform 0.2s, filter 0.2s; box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        .btn:active { transform: translateY(2px); }
+
+        /* Panels */
+        .panel, .modal {
+            position: fixed; top: 0; right: -100%; width: 100%; height: 100%;
+            background: var(--panel-bg); z-index: 100;
+            transition: right 0.4s cubic-bezier(0.77, 0, 0.175, 1);
+            padding: 20px; box-sizing: border-box; overflow-y: auto;
+        }
+        .panel.active { right: 0; }
+
+        .modal {
+            right: 0; top: -100%; display: flex; flex-direction: column; 
+            justify-content: center; align-items: center; transition: top 0.4s;
+        }
+        .modal.active { top: 0; }
+
+        .shop-item {
+            background: rgba(255,255,255,0.05); border: 1px solid var(--gold);
+            margin-bottom: 10px; padding: 15px; border-radius: 12px;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+
+        /* Tools Overlay & Hint */
+        #overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.7); display: none; z-index: 50;
+        }
+        .swap-highlight { z-index: 55 !important; box-shadow: 0 0 20px 5px var(--gold) !important; transform: scale(1.05); }
+
+        #hint-box {
+            position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+            background: rgba(0,0,0,0.8); border: 1px solid var(--gold); padding: 10px;
+            border-radius: 10px; display: none; text-align: center; color: white; z-index: 40;
+        }
+
+        #robot {
+            position: absolute; width: 40px; height: 40px; z-index: 60; display: none;
+            background: url('https://cdn-icons-png.flaticon.com/512/4712/4712109.png') no-repeat center/contain;
+            transition: left 0.8s ease-in-out, top 0.8s ease-in-out;
+        }
+
+        /* Wheel Area */
+        .wheel-box { background: #222; border: 2px solid var(--gold); border-radius: 50%; width: 250px; height: 250px; display: flex; justify-content: center; align-items: center; text-align: center; font-size: 1.2rem; margin: 20px 0; transition: transform 3s cubic-bezier(0.25, 0.1, 0.25, 1); }
+    </style>
+</head>
+<body>
+
+<div id="streak-banner">🔥 Streak Active! <span id="streak-text"></span></div>
+
+<div id="header">
+    <div class="stat">💎 <span id="diamond-count">0</span></div>
+    <div class="stat">Lvl <span id="lvl-display">1</span> (<span id="diff-display">Easy</span>)</div>
+    <div class="stat">Stage <span id="stage-display">1/1</span></div>
+</div>
+
+<div id="game-info">
+    <div>Moves: <span id="moves-left">∞</span></div>
+    <div>Time: <span id="time-left">∞</span></div>
+</div>
+
+<div id="game-container">
+    <div id="robot"></div>
+</div>
+
+<div class="controls-row">
+    <button class="btn" onclick="togglePanel('shop-panel')">🛒 Shop</button>
+    <button class="btn" onclick="togglePanel('wheel-panel')">🎡 Spin Wheel</button>
+    <button class="btn" onclick="skipStage()" style="background: #ccc; color: black;">⏭ Skip Stage</button>
+    <button class="btn" onclick="skipLevel()" style="background: #ccc; color: black;">⏭ Skip Level</button>
+</div>
+
+<div id="hint-box">Next moves:<br><span id="hint-text" style="color:var(--gold);"></span></div>
+
+<!-- Shop Panel -->
+<div id="shop-panel" class="panel">
+    <h2 style="color: var(--gold); text-align: center;">Suchu's Shop</h2>
+    <div class="shop-item">
+        <div><b>Magnifying Glass</b><br><small>Next 20 optimal moves</small></div>
+        <button class="btn" onclick="buyItem('hint', 15)">15 💎</button>
+    </div>
+    <div class="shop-item">
+        <div><b>Suchu's Robot</b><br><small>Smoothly fixes 5 random tiles</small></div>
+        <button class="btn" onclick="buyItem('robot', 30)">30 💎</button>
+    </div>
+    <div class="shop-item">
+        <div><b>Level Shrinker</b><br><small>Shrinks grid by 1 size</small></div>
+        <button class="btn" onclick="buyItem('shrink', 49)">49 💎</button>
+    </div>
+    <div class="shop-item">
+        <div><b>Block Mover</b><br><small>Swap any two blocks anywhere</small></div>
+        <button class="btn" onclick="buyItem('swap', 9)">9 💎</button>
+    </div>
+    <div class="shop-item">
+        <div><b>Number Army</b><br><small>Shows order numbers on blocks</small></div>
+        <button class="btn" onclick="buyItem('numbers', 20)">20 💎</button>
+    </div>
+    <button class="btn" onclick="togglePanel('shop-panel')" style="width:100%; margin-top:20px;">Close Shop</button>
+</div>
+
+<!-- Wheel Panel -->
+<div id="wheel-panel" class="panel">
+    <h2 style="color: var(--gold); text-align: center;">Challenge Wheel</h2>
+    <p style="text-align: center;">Spin to get a diamond challenge!</p>
+    <div style="display:flex; justify-content: center;">
+        <div class="wheel-box" id="wheel-display">Spin Me!</div>
+    </div>
+    <button class="btn" onclick="spinWheel()" style="width:100%;">Spin Wheel</button>
+    <button class="btn" onclick="togglePanel('wheel-panel')" style="width:100%; margin-top:10px;">Close</button>
+</div>
+
+<!-- Modals -->
+<div id="overlay"></div>
+
+<div id="out-of-moves-modal" class="modal">
+    <h2 style="color: var(--gold);">Out of Moves / Time!</h2>
+    <button class="btn" onclick="buyMoves()">Buy 20 Moves (10 💎)</button>
+    <button class="btn" onclick="watchAdMoves()">Watch Ad for Moves (35% Chance)</button>
+    <button class="btn" onclick="restartLevel()" style="background: red; color: white;">Restart Level (Lose Streak)</button>
+</div>
+
+<script>
+    // --- State Variables ---
+    let diamonds = 0;
+    let currentLevel = 1;
+    let currentStage = 1;
+    let gridSize = 5;
+    
+    let timeLimit = 0; // seconds
+    let moveLimit = 0;
+    let timeRemaining = 0;
+    let movesRemaining = 0;
+    let timerInterval = null;
+
+    let difficultyData = {};
+    let tiles = [];
+    let emptyTile = { r: 0, c: 0 };
+    let scramblePath = []; // Tracks optimal reverse moves
+    
+    // Streak System
+    let streakTarget = 0;
+    let streakCurrent = 0;
+    let streakReward = 0;
+
+    // Shop States
+    let showingNumbers = false;
+    let isSwapping = false;
+    let swapSelection = [];
+
+    // Nature/Scenery Images for Nani
+    const images = Array.from({length: 100}, (_, i) => `https://picsum.photos/seed/${i + 500}/600/600`);
+
+    // --- Core Logic ---
+    function initGame() {
+        if(timerInterval) clearInterval(timerInterval);
+        hideModals();
+        isSwapping = false;
+        swapSelection = [];
+        scramblePath = [];
+        
+        const container = document.getElementById('game-container');
+        const size = Math.min(window.innerWidth - 30, 400);
+        container.style.width = size + 'px';
+        container.style.height = size + 'px';
+
+        setupLevelData();
+        createTiles(size);
+        scrambleBoard();
+        updateUI();
+
+        if (timeLimit > 0) {
+            timerInterval = setInterval(() => {
+                timeRemaining--;
+                updateUI();
+                if (timeRemaining <= 0) triggerGameOver();
+            }, 1000);
+        }
+    }
+
+    function setupLevelData() {
+        const type = currentLevel % 5;
+        // 1=Easy, 2=Medium, 3=Hard, 4=Super Hard, 0=Nightmare (5)
+        
+        if (type === 1) {
+            difficultyData = { name: "Easy", stages: 1, baseGrid: 5, moves: 9999, time: 0, scramble: 30 };
+        } else if (type === 2) {
+            difficultyData = { name: "Medium", stages: 1, baseGrid: 5, moves: 175, time: 30 * 60, scramble: 50 };
+        } else if (type === 3) {
+            difficultyData = { name: "Hard", stages: 2, baseGrid: 5, moves: 9999, time: 45 * 60, scramble: 80 };
+        } else if (type === 4) {
+            difficultyData = { name: "Super Hard", stages: 2, baseGrid: 5, moves: 325, time: 35 * 60, scramble: 100 };
+        } else if (type === 0) {
+            difficultyData = { name: "Nightmare", stages: 3, baseGrid: 6, moves: 525, time: 70 * 60, scramble: 150 };
+        }
+
+        gridSize = difficultyData.baseGrid;
+        
+        // Only set limits on Stage 1 start
+        if (currentStage === 1) {
+            timeLimit = difficultyData.time;
+            timeRemaining = timeLimit;
+            moveLimit = difficultyData.moves;
+            movesRemaining = moveLimit;
+        }
+    }
+
+    function createTiles(boardSize) {
+        const container = document.getElementById('game-container');
+        container.innerHTML = '<div id="robot"></div>';
+        tiles = [];
+        const tileSize = boardSize / gridSize;
+
+        for (let r = 0; r < gridSize; r++) {
+            for (let c = 0; c < gridSize; c++) {
+                if (r === gridSize - 1 && c === gridSize - 1) {
+                    emptyTile = { r, c };
+                    continue;
+                }
+                const tile = document.createElement('div');
+                tile.className = 'tile';
+                tile.style.width = tileSize + 'px';
+                tile.style.height = tileSize + 'px';
+                tile.style.left = (c * tileSize) + 'px';
+                tile.style.top = (r * tileSize) + 'px';
+                
+                // Get image based on overall progression
+                let imgIdx = ((currentLevel - 1) * 3) + currentStage; 
+                tile.style.backgroundImage = `url(${images[imgIdx % 100]})`;
+                tile.style.backgroundPosition = `${(c / (gridSize - 1)) * 100}% ${(r / (gridSize - 1)) * 100}%`;
+                
+                const tileObj = { el: tile, r, c, orgR: r, orgC: c };
+                tile.onclick = () => handleTileClick(tileObj);
+                container.appendChild(tile);
+                tiles.push(tileObj);
+            }
+        }
+    }
+
+    // AI Scramble & Path tracking
+    function scrambleBoard() {
+        scramblePath = [];
+        let prevR = -1, prevC = -1;
+        
+        for (let i = 0; i < difficultyData.scramble; i++) {
+            let validMoves = tiles.filter(t => {
+                const dr = Math.abs(t.r - emptyTile.r);
+                const dc = Math.abs(t.c - emptyTile.c);
+                const isAdjacent = (dr === 1 && dc === 0) || (dr === 0 && dc === 1);
+                const notBacktracking = !(t.r === prevR && t.c === prevC);
+                return isAdjacent && notBacktracking;
+            });
+
+            if (validMoves.length === 0) validMoves = tiles.filter(t => (Math.abs(t.r - emptyTile.r) === 1 && Math.abs(t.c - emptyTile.c) === 0) || (Math.abs(t.r - emptyTile.r) === 0 && Math.abs(t.c - emptyTile.c) === 1));
+
+            const toMove = validMoves[Math.floor(Math.random() * validMoves.length)];
+            
+            // Record reverse direction for hint
+            let dir = "";
+            if (toMove.r > emptyTile.r) dir = "Down";
+            if (toMove.r < emptyTile.r) dir = "Up";
+            if (toMove.c > emptyTile.c) dir = "Right";
+            if (toMove.c < emptyTile.c) dir = "Left";
+            scramblePath.unshift(dir); // Add to front
+
+            prevR = emptyTile.r; prevC = emptyTile.c;
+            
+            // Swap data logic
+            const tr = toMove.r; const tc = toMove.c;
+            toMove.r = emptyTile.r; toMove.c = emptyTile.c;
+            emptyTile.r = tr; emptyTile.c = tc;
+        }
+        
+        // Apply visual
+        tiles.forEach(t => moveTileVisual(t, t.r, t.c));
+    }
+
+    function handleTileClick(tile) {
+        if (isSwapping) { handleBlockMover(tile); return; }
+
+        const dr = Math.abs(tile.r - emptyTile.r);
+        const dc = Math.abs(tile.c - emptyTile.c);
+
+        if ((dr === 1 && dc === 0) || (dr === 0 && dc === 1)) {
+            executeMove(tile);
+        }
+    }
+
+    function executeMove(tile) {
+        const tr = tile.r; const tc = tile.c;
+        moveTileVisual(tile, emptyTile.r, emptyTile.c);
+        tile.r = emptyTile.r; tile.c = emptyTile.c;
+        emptyTile.r = tr; emptyTile.c = tc;
+
+        // Update hints logic slightly (removes top hint if user moved)
+        if(scramblePath.length > 0) scramblePath.shift();
+        renderHint();
+
+        movesRemaining--;
+        updateUI();
+
+        if (checkWinCondition()) {
+            handleWin();
+        } else if (movesRemaining <= 0) {
+            triggerGameOver();
+        }
+    }
+
+    function moveTileVisual(tile, r, c) {
+        const tileSize = parseInt(tile.el.style.width);
+        tile.el.style.left = (c * tileSize) + 'px';
+        tile.el.style.top = (r * tileSize) + 'px';
+    }
+
+    function checkWinCondition() {
+        return tiles.every(t => t.r === t.orgR && t.c === t.orgC);
+    }
+
+    function handleWin() {
+        if (currentStage < difficultyData.stages) {
+            currentStage++;
+            alert("Stage Clear! Moving to next stage.");
+            initGame();
+        } else {
+            alert("Level Complete!");
+            currentLevel++;
+            currentStage = 1;
+            
+            // Streak Check
+            if (streakTarget > 0) {
+                streakCurrent++;
+                if (streakCurrent >= streakTarget) {
+                    alert(`Challenge Complete! You won ${streakReward} Diamonds!`);
+                    diamonds += streakReward;
+                    streakTarget = 0; streakCurrent = 0; streakReward = 0;
+                }
+            }
+            initGame();
+        }
+    }
+
+    // --- Shop & Tools ---
+    function togglePanel(id) {
+        document.getElementById(id).classList.toggle('active');
+    }
+
+    function buyItem(item, price) {
+        if (diamonds >= price) {
+            diamonds -= price;
+            updateUI();
+            togglePanel('shop-panel');
+            activateTool(item);
+        } else {
+            alert("Not enough Diamonds!");
+        }
+    }
+
+    function activateTool(item) {
+        if (item === 'numbers') {
+            showingNumbers = true;
+            tiles.forEach(t => { t.el.innerText = (t.orgR * gridSize) + t.orgC + 1; });
+        }
+        if (item === 'hint') {
+            document.getElementById('hint-box').style.display = 'block';
+            renderHint();
+        }
+        if (item === 'shrink') {
+            if (gridSize > 3) { gridSize--; initGame(); }
+            else alert("Grid is already minimal!");
+        }
+        if (item === 'swap') {
+            isSwapping = true;
+            document.getElementById('overlay').style.display = 'block';
+        }
+        if (item === 'robot') {
+            runRobot();
+        }
+    }
+
+    function renderHint() {
+        if (scramblePath.length === 0) return;
+        const disp = scramblePath.slice(0, 20).join(" → ");
+        document.getElementById('hint-text').innerText = disp;
+    }
+
+    function handleBlockMover(tile) {
+        tile.el.classList.add('swap-highlight');
+        swapSelection.push(tile);
+
+        if (swapSelection.length === 2) {
+            const t1 = swapSelection[0]; const t2 = swapSelection[1];
+            const tr = t1.r; const tc = t1.c;
+            
+            // Swap data & visual
+            t1.r = t2.r; t1.c = t2.c; moveTileVisual(t1, t1.r, t1.c);
+            t2.r = tr; t2.c = tc; moveTileVisual(t2, t2.r, t2.c);
+
+            // Cleanup
+            isSwapping = false; swapSelection = [];
+            document.getElementById('overlay').style.display = 'none';
+            tiles.forEach(t => t.el.classList.remove('swap-highlight'));
+            
+            if(checkWinCondition()) handleWin();
+        }
+    }
+
+    function runRobot() {
+        const robot = document.getElementById('robot');
+        robot.style.display = 'block';
+        let fixes = 0;
+        
+        const robotInterval = setInterval(() => {
+            const wrong = tiles.filter(t => t.r !== t.orgR || t.c !== t.orgC);
+            if (wrong.length > 0 && fixes < 5) {
+                const target = wrong[0];
+                // Move robot to tile
+                robot.style.left = target.el.style.left;
+                robot.style.top = target.el.style.top;
+                
+                setTimeout(() => {
+                    // Force tile to correct spot
+                    target.r = target.orgR; target.c = target.orgC;
+                    moveTileVisual(target, target.r, target.c);
+                    fixes++;
+                    if(checkWinCondition()) handleWin();
+                }, 800);
+            } else {
+                clearInterval(robotInterval);
+                robot.style.display = 'none';
+            }
+        }, 1600);
+    }
+
+    // --- Wheel & Economy ---
+    function spinWheel() {
+        if (streakTarget > 0) { alert("Finish current challenge first!"); return; }
+        
+        const rand = Math.random() * 100;
+        let resultTxt = "";
+        
+        if (rand <= 5) { streakTarget = 7; streakReward = 100; resultTxt = "100💎 for 7 Wins!"; }
+        else if (rand <= 15) { streakTarget = 5; streakReward = 50; resultTxt = "50💎 for 5 Wins!"; }
+        else if (rand <= 28) { streakTarget = 5; streakReward = 25; resultTxt = "25💎 for 5 Wins!"; }
+        else if (rand <= 48) { streakTarget = 4; streakReward = 15; resultTxt = "15💎 for 4 Wins!"; }
+        else if (rand <= 73) { streakTarget = 3; streakReward = 10; resultTxt = "10💎 for 3 Wins!"; }
+        else { streakTarget = 0; streakReward = 0; resultTxt = "Nothing! Try later."; }
+
+        const wheelBox = document.getElementById('wheel-display');
+        wheelBox.style.transform = `rotate(${Math.floor(Math.random()*1000 + 720)}deg)`;
+        
+        setTimeout(() => {
+            wheelBox.innerText = resultTxt;
+            updateUI();
+        }, 3000);
+    }
+
+    // --- UI & Lifecycle ---
+    function updateUI() {
+        document.getElementById('diamond-count').innerText = diamonds;
+        document.getElementById('lvl-display').innerText = currentLevel;
+        document.getElementById('diff-display').innerText = difficultyData.name;
+        document.getElementById('stage-display').innerText = `${currentStage}/${difficultyData.stages}`;
+        
+        document.getElementById('moves-left').innerText = movesRemaining > 1000 ? "∞" : movesRemaining;
+        
+        if (timeLimit === 0) {
+            document.getElementById('time-left').innerText = "∞";
+        } else {
+            const m = Math.floor(timeRemaining / 60);
+            const s = timeRemaining % 60;
+            document.getElementById('time-left').innerText = `${m}:${s.toString().padStart(2,'0')}`;
+        }
+
+        const banner = document.getElementById('streak-banner');
+        if (streakTarget > 0) {
+            banner.style.display = 'block';
+            document.getElementById('streak-text').innerText = `Need ${streakTarget - streakCurrent} more wins for ${streakReward}💎!`;
+        } else {
+            banner.style.display = 'none';
+        }
+    }
+
+    function triggerGameOver() {
+        clearInterval(timerInterval);
+        document.getElementById('overlay').style.display = 'block';
+        document.getElementById('out-of-moves-modal').classList.add('active');
+    }
+
+    function hideModals() {
+        document.getElementById('overlay').style.display = 'none';
+        document.getElementById('out-of-moves-modal').classList.remove('active');
+    }
+
+    function buyMoves() {
+        if (diamonds >= 10) {
+            diamonds -= 10; movesRemaining += 20; timeRemaining += 120; // add some time too
+            hideModals(); updateUI();
+            if(timeLimit > 0) timerInterval = setInterval(()=>{ timeRemaining--; updateUI(); if(timeRemaining<=0) triggerGameOver(); }, 1000);
+        } else alert("Not enough Diamonds!");
+    }
+
+    function watchAdMoves() {
+        if (Math.random() <= 0.35) {
+            alert("Ad Watched Successfully! +20 Moves!");
+            movesRemaining += 20; timeRemaining += 120;
+            hideModals(); updateUI();
+            if(timeLimit > 0) timerInterval = setInterval(()=>{ timeRemaining--; updateUI(); if(timeRemaining<=0) triggerGameOver(); }, 1000);
+        } else {
+            alert("No ads available right now.");
+        }
+    }
+
+    function restartLevel() {
+        streakCurrent = 0; // Break streak
+        initGame();
+    }
+
+    // Testing overrides
+    function skipStage() { 
+        if(currentStage < difficultyData.stages) { currentStage++; initGame(); } 
+        else skipLevel();
+    }
+    function skipLevel() { currentLevel++; currentStage=1; initGame(); }
+
+    // Warning on close if streak active
+    window.addEventListener('beforeunload', (e) => {
+        if (streakTarget > 0) {
+            e.preventDefault();
+            e.returnValue = "You have an active streak! Leaving will reset it.";
+        }
+    });
+
+    window.onload = initGame;
+</script>
+
+</body>
+</html>
